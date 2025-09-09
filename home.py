@@ -37,4 +37,3 @@ with col2:
     st.button("📦 Project 5 (binnenkort)", disabled=True, use_container_width=True)
 
 st.markdown("---")
-st.caption("De zijbalk is verborgen. Navigeren kan via de knoppen op deze pagina.")
