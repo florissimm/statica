@@ -33,9 +33,9 @@ with col1:
     # 2D
     if st.button("🟦 2D Vector Visualisatie", use_container_width=True):
         try:
-            st.switch_page("pages/2_2D_Vector_Visualisatie_2.py")
+            st.switch_page("pages/2_2D_Vector_Visualisatie.py")
         except Exception:
-            st.error("Kon niet schakelen naar 2D. Bestaat 'pages/2_2D_Vector_Visualisatie_2.py'?")
+            st.error("Kon niet schakelen naar 2D. Bestaat 'pages/2_2D_Vector_Visualisatie.py'?")
 
 with col2:
     st.subheader("In ontwikkeling")
@@ -44,3 +44,4 @@ with col2:
     st.button("📦 Project 5 (binnenkort)", disabled=True, use_container_width=True)
 
 st.markdown("---")
+
