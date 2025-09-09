@@ -46,10 +46,9 @@ with col1:
 
 with col2:
     st.subheader("In ontwikkeling")
-    st.button("📦 Project 2 (binnenkort)", disabled=True, use_container_width=True)
-    st.button("📦 Project 3 (binnenkort)", disabled=True, use_container_width=True)
     st.button("📦 Project 4 (binnenkort)", disabled=True, use_container_width=True)
     st.button("📦 Project 5 (binnenkort)", disabled=True, use_container_width=True)
 
 st.markdown("---")
+
 
