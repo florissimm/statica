@@ -28,20 +28,27 @@ with col1:
         try:
             st.switch_page("pages/1_3D_Vector_Visualisatie.py")
         except Exception:
-            st.error("Kon niet schakelen via switch_page. Bestaat 'pages/1_3D_Vector_Visualisatie.py'?")
+            st.error("Kon niet schakelen. Bestaat 'pages/1_3D_Vector_Visualisatie.py'?")
 
     # 2D
     if st.button("🟦 2D Vector Visualisatie", use_container_width=True):
         try:
-            st.switch_page("pages/2_2D_Vector_Visualisatie.py")
+            st.switch_page("pages/2_2D_Vector_Visualisatie_2.py")
         except Exception:
-            st.error("Kon niet schakelen naar 2D. Bestaat 'pages/2_2D_Vector_Visualisatie.py'?")
+            st.error("Kon niet schakelen. Bestaat 'pages/2_2D_Vector_Visualisatie_2.py'?")
+
+    # 2D onbekende solver (nieuw)
+    if st.button("🔎 2D Onbekende Solver", use_container_width=True):
+        try:
+            st.switch_page("pages/3_2D_Onbekende_Vector_Solver.py")
+        except Exception:
+            st.error("Kon niet schakelen. Bestaat 'pages/3_2D_Onbekende_Vector_Solver.py'?")
 
 with col2:
     st.subheader("In ontwikkeling")
+    st.button("📦 Project 2 (binnenkort)", disabled=True, use_container_width=True)
     st.button("📦 Project 3 (binnenkort)", disabled=True, use_container_width=True)
     st.button("📦 Project 4 (binnenkort)", disabled=True, use_container_width=True)
     st.button("📦 Project 5 (binnenkort)", disabled=True, use_container_width=True)
 
 st.markdown("---")
-
