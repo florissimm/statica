@@ -34,8 +34,7 @@ with st.sidebar:
         alpha = st.number_input("α (° van X naar x′)", value=-30.0, step=1.0)
         phi = alpha  # R ligt langs x′ → zelfde richting als rotatie-as
     st.markdown("---")
-    st.caption("Tip: voor het boekvoorbeeld: F2=450 N @45°, F3=200 N @0°, R=1000 N langs x′ met α = -30°.")
-
+    
 # =========================
 # Invoer bekende krachten
 # =========================
