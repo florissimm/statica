@@ -75,32 +75,36 @@ def pad_range(vals, pr=0.15):
     pad = (vmax - vmin) * pr
     return (vmin - pad, vmax + pad)
 
-def add_origin_axes(fig, xr, yr, zr, color="#888888", width=2):
-    """Voeg X, Y, Z assen toe die door (0,0,0) lopen."""
-    # X-as
+def add_origin_axes(fig, xr, yr, zr, color="#9e9e9e", width=2, with_labels=False):
+    """Voeg X/Y/Z-assen door (0,0,0) toe en optioneel labels X,Y,Z op de +uiteinden."""
+    # X
     fig.add_trace(go.Scatter3d(
         x=[xr[0], xr[1]], y=[0,0], z=[0,0],
-        mode="lines",
-        line=dict(color=color, width=width),
-        name="X-as (0)",
-        showlegend=False
+        mode="lines", line=dict(color=color, width=width),
+        name="X-as (0)", showlegend=False
     ))
-    # Y-as
+    # Y
     fig.add_trace(go.Scatter3d(
         x=[0,0], y=[yr[0], yr[1]], z=[0,0],
-        mode="lines",
-        line=dict(color=color, width=width),
-        name="Y-as (0)",
-        showlegend=False
+        mode="lines", line=dict(color=color, width=width),
+        name="Y-as (0)", showlegend=False
     ))
-    # Z-as
+    # Z
     fig.add_trace(go.Scatter3d(
         x=[0,0], y=[0,0], z=[zr[0], zr[1]],
-        mode="lines",
-        line=dict(color=color, width=width),
-        name="Z-as (0)",
-        showlegend=False
+        mode="lines", line=dict(color=color, width=width),
+        name="Z-as (0)", showlegend=False
     ))
+    if with_labels:
+        fig.add_trace(go.Scatter3d(
+            x=[xr[1], 0, 0],
+            y=[0,     yr[1], 0],
+            z=[0,     0,     zr[1]],
+            mode="text",
+            text=["X","Y","Z"],
+            textposition="middle center",
+            showlegend=False
+        ))
 
 # Plotly default palette (10)
 COLOR_PALETTE = ["#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd",
@@ -114,7 +118,6 @@ if "entries" not in st.session_state:
         {"mode":"cart","force":0.0,"x":0.0,"y":0.0,"z":0.0,
          "alpha":0.0,"beta":0.0,"gamma":0.0,"color":COLOR_PALETTE[0]},
     ]
-
 if "color_index" not in st.session_state:
     st.session_state.color_index = 1
 
@@ -133,11 +136,17 @@ with st.sidebar:
     resultant_color = st.color_picker("Kleur resultante", value="#e41a1c")
 
     st.markdown("---")
-    # NIEUW: assen door oorsprong & aslabels
+    # Nieuw: assen door oorsprong + opties
     show_origin_axes = st.checkbox("Toon assen door oorsprong (X/Y/Z)", value=True)
     origin_axes_color = st.color_picker("Kleur assen (0,0,0)", value="#9e9e9e")
     origin_axes_width = st.slider("Lijndikte assen (0,0,0)", 1, 8, 2)
+    show_origin_axis_labels = st.checkbox("Toon labels bij oorsprong-assen (X/Y/Z)", value=True)
+
+    st.markdown("---")
+    # Nieuw: grid/titels/assen
     show_axis_numbers = st.checkbox("Toon as-getallen (ticks)", value=True)
+    show_grid = st.checkbox("Toon rasterlijnen (grid)", value=True)
+    hide_xyz_axes = st.checkbox("Verberg X/Y/Z-assen (alles van Plotly-assen)", value=False)
 
     st.markdown("---")
     if not autoscale:
@@ -155,7 +164,7 @@ with st.sidebar:
         st.session_state.color_index = 1
 
 # ===================================
-# Invoer per vector + handmatig toevoegen
+# Invoer per vector
 # ===================================
 st.subheader("Vectoren invoeren (van oorsprong)")
 
@@ -238,7 +247,7 @@ for i, ((x, y, z), color) in enumerate(zip(vectors, colors), start=1):
     add_arrow(fig, x, y, z, color, linewidth, markersize, show_points, draw_arrowheads, f"Vector {i}")
     xs += [0, x]; ys += [0, y]; zs += [0, z]
 
-# Resultante vector optioneel tekenen
+# Resultante vector optioneel
 Rx = Ry = Rz = 0.0
 if vectors and show_resultant:
     Rx = sum(x for x,y,z in vectors)
@@ -246,7 +255,7 @@ if vectors and show_resultant:
     Rz = sum(z for x,y,z in vectors)
     add_arrow(fig, Rx, Ry, Rz, resultant_color, linewidth+2, markersize+2, show_points, draw_arrowheads, "Resultante")
 
-# As-bereiken (na vectoren bepalen)
+# Asbereiken
 if xs and ys and zs:
     if show_resultant and (Rx or Ry or Rz):
         xs += [0, Rx]; ys += [0, Ry]; zs += [0, Rz]
@@ -257,25 +266,30 @@ if xs and ys and zs:
 else:
     xr, yr, zr = (-1, 1), (-1, 1), (-1, 1)
 
-# NIEUW: assen door oorsprong (0,0,0)
+# Oorsprong-assen (optioneel met labels)
 if show_origin_axes:
-    add_origin_axes(fig, xr, yr, zr, color=origin_axes_color, width=origin_axes_width)
+    add_origin_axes(fig, xr, yr, zr, color=origin_axes_color, width=origin_axes_width, with_labels=show_origin_axis_labels)
+
+# As layout toggles
+def axis_cfg(title):
+    if hide_xyz_axes:
+        return dict(visible=False)
+    return dict(
+        title=title,
+        range=[xr[0], xr[1]] if title=="X" else ([yr[0], yr[1]] if title=="Y" else [zr[0], zr[1]]),
+        showticklabels=show_axis_numbers,
+        showgrid=show_grid
+    )
 
 fig.update_layout(
     scene=dict(
-        xaxis=dict(title="X", range=[xr[0], xr[1]], showticklabels=show_axis_numbers),
-        yaxis=dict(title="Y", range=[yr[0], yr[1]], showticklabels=show_axis_numbers),
-        zaxis=dict(title="Z", range=[zr[0], zr[1]], showticklabels=show_axis_numbers),
+        xaxis=axis_cfg("X"),
+        yaxis=axis_cfg("Y"),
+        zaxis=axis_cfg("Z"),
         aspectmode="cube",
     ),
     margin=dict(l=0, r=0, t=40, b=0),
-    legend=dict(
-        orientation="h",
-        yanchor="top",
-        y=1.12,
-        xanchor="left",
-        x=0.0
-    )
+    legend=dict(orientation="h", yanchor="top", y=1.12, xanchor="left", x=0.0)
 )
 
 st.markdown("## Interactieve 3D Vectoren")
@@ -335,11 +349,11 @@ if vectors:
             else:
                 desc.append(f"**Vector {i} (cart):** Direct (X,Y,Z)=({x0:.2f},{y0:.2f},{z0:.2f})")
     desc.append("**Som van componenten:**")
-    desc.append(f"Rx = " + " + ".join([f"{x:.2f}" for x,_,_ in vectors]) + f" = {Rx:.2f}")
-    desc.append(f"Ry = " + " + ".join([f"{y:.2f}" for _,y,_ in vectors]) + f" = {Ry:.2f}")
-    desc.append(f"Rz = " + " + ".join([f"{z:.2f}" for _,_,z in vectors]) + f" = {Rz:.2f}")
+    desc.append("Rx = " + " + ".join([f"{x:.2f}" for x,_,_ in vectors]) + f" = {Rx:.2f}")
+    desc.append("Ry = " + " + ".join([f"{y:.2f}" for _,y,_ in vectors]) + f" = {Ry:.2f}")
+    desc.append("Rz = " + " + ".join([f"{z:.2f}" for _,_,z in vectors]) + f" = {Rz:.2f}")
     desc.append(f"**Resultante:** R=({Rx:.2f},{Ry:.2f},{Rz:.2f}), |R|={Rmag:.2f} N, hoeken: α={Ra:.2f}°, β={Rb:.2f}°, γ={Rg:.2f}°")
     st.markdown("\n\n".join(desc))
 
 st.markdown("---")
-st.caption("Assen door oorsprong en as-getallen zijn instelbaar in de sidebar. Alle resultaten afgerond op 2 decimalen.")
+st.caption("Assen door oorsprong, labels, rasterlijnen en zichtbaarheid van Plotly-assen kun je links instellen. Alle resultaten afgerond op 2 decimalen.")
