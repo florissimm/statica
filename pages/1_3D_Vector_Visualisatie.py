@@ -339,4 +339,3 @@ if vectors:
     )
 
 st.markdown("---")
-st.caption("Nieuwe vectoren krijgen automatisch een volgende kleur uit een cyclus. Alle resultaten zijn afgerond op 2 decimalen.")
