@@ -3,9 +3,8 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
-# Sidebar zichtbaar houden
+# Sidebar zichtbaar
 st.set_page_config(page_title="🧭 2D Vector Visualisatie", layout="wide", initial_sidebar_state="expanded")
-
 st.title("🧭 2D Vector Visualisatie")
 
 # ----------------------------
@@ -14,10 +13,11 @@ st.title("🧭 2D Vector Visualisatie")
 def vec_norm2(x, y):
     return math.sqrt(x*x + y*y)
 
-def angle_deg(x, y):
-    if x == 0 and y == 0:
+def angle_from_x_deg(x, y):
+    """Richtingshoek t.o.v. X-as ([-180,180])"""
+    if abs(x) < 1e-12 and abs(y) < 1e-12:
         return None
-    return math.degrees(math.atan2(y, x))  # [-180,180]
+    return math.degrees(math.atan2(y, x))
 
 def pad_range(vals, pr=0.15):
     vmin, vmax = min(vals), max(vals)
@@ -43,7 +43,7 @@ def add_arrow2d(fig, x, y, color, linewidth, markersize, name, draw_arrowhead=Tr
             opacity=0
         )
 
-# Plotly default palette (10)
+# Plotly default 10-kleuren
 COLOR_PALETTE = [
     "#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd",
     "#8c564b","#e377c2","#7f7f7f","#bcbd22","#17becf"
@@ -55,17 +55,17 @@ COLOR_PALETTE = [
 if "entries2d" not in st.session_state:
     st.session_state.entries2d = [{
         "mode": "cart",      # "cart" of "angle"
-        "force": 0.0,        # N
-        "x": 0.0, "y": 0.0,  # voor cart
-        "theta": 0.0,        # graden, voor angle
+        "force": 0.0,        # optioneel: schaal de (x,y) naar F
+        "x": 0.0, "y": 0.0,  # gebruikt in cart
+        "theta": 0.0,        # graden
+        "ref": "X-as",       # "X-as" of "Y-as" (alleen voor angle)
         "color": COLOR_PALETTE[0]
     }]
-
 if "color_index_2d" not in st.session_state:
     st.session_state.color_index_2d = 1
 
 # ----------------------------
-# Sidebar (zichtbaar)
+# Sidebar
 # ----------------------------
 with st.sidebar:
     st.header("Instellingen")
@@ -86,7 +86,7 @@ with st.sidebar:
     st.markdown("---")
     if st.button("🗑️ Verwijder alle vectoren"):
         st.session_state.entries2d = [{
-            "mode":"cart","force":0.0,"x":0.0,"y":0.0,"theta":0.0,"color":COLOR_PALETTE[0]
+            "mode":"cart","force":0.0,"x":0.0,"y":0.0,"theta":0.0,"ref":"X-as","color":COLOR_PALETTE[0]
         }]
         st.session_state.color_index_2d = 1
 
@@ -98,17 +98,17 @@ st.subheader("Vectoren invoeren (van oorsprong)")
 if st.button("➕ Voeg rij toe"):
     color = COLOR_PALETTE[st.session_state.color_index_2d % len(COLOR_PALETTE)]
     st.session_state.entries2d.append({
-        "mode":"cart","force":0.0,"x":0.0,"y":0.0,"theta":0.0,"color":color
+        "mode":"cart","force":0.0,"x":0.0,"y":0.0,"theta":0.0,"ref":"X-as","color":color
     })
     st.session_state.color_index_2d += 1
 
 new_entries = []
 for i, ent in enumerate(st.session_state.entries2d):
-    cols = st.columns([1.2, 1.2, 1.2, 1.2, 1.4, 0.6], gap="small")
+    cols = st.columns([1.1, 1.1, 1.2, 1.2, 1.3, 0.7], gap="small")
     with cols[0]:
         mode = st.selectbox(
             f"Modus {i+1}",
-            ["cart", "angle"],  # cart: X,Y   |   angle: F, θ°
+            ["cart", "angle"],  # cart: X,Y | angle: F, θ, ref
             index=0 if ent["mode"]=="cart" else 1,
             key=f"mode2d_{i}"
         )
@@ -127,13 +127,19 @@ for i, ent in enumerate(st.session_state.entries2d):
                 pass
             else:
                 new_entries.append({
-                    "mode":"cart","force":force,"x":x,"y":y,"theta":0.0,"color":color
+                    "mode":"cart","force":force,"x":x,"y":y,
+                    "theta":0.0,"ref":"X-as","color":color
                 })
     else:
         with cols[2]:
-            theta = st.number_input(f"θ°{i+1} (vanaf X-as)", value=float(ent["theta"]), key=f"theta2d_{i}")
+            theta = st.number_input(f"θ°{i+1}", value=float(ent["theta"]), key=f"theta2d_{i}")
         with cols[3]:
-            st.write("")  # leeg om grid te houden
+            ref_axis = st.selectbox(
+                "Ref",
+                ["X-as", "Y-as"],
+                index=0 if ent.get("ref","X-as")=="X-as" else 1,
+                key=f"ref2d_{i}"
+            )
         with cols[4]:
             color = st.color_picker(f"Kleur {i+1}", value=ent.get("color", COLOR_PALETTE[i % len(COLOR_PALETTE)]), key=f"color2d_{i}")
         with cols[5]:
@@ -141,7 +147,8 @@ for i, ent in enumerate(st.session_state.entries2d):
                 pass
             else:
                 new_entries.append({
-                    "mode":"angle","force":force,"x":0.0,"y":0.0,"theta":theta,"color":color
+                    "mode":"angle","force":force,"x":0.0,"y":0.0,
+                    "theta":theta,"ref":ref_axis,"color":color
                 })
 
 st.session_state.entries2d = new_entries
@@ -149,8 +156,9 @@ st.session_state.entries2d = new_entries
 # ----------------------------
 # Berekeningen
 # ----------------------------
-vectors = []   # (x,y,color)
-explain_rows = []
+vectors = []        # (x,y,color)
+explain_rows = []   # strings
+
 for ent in st.session_state.entries2d:
     mode = ent["mode"]
     F = ent["force"] or 0.0
@@ -162,21 +170,28 @@ for ent in st.session_state.entries2d:
             s = F / mag0
             x, y = x0*s, y0*s
             explain_rows.append(
-                f"**cart**: basis (x0,y0)=({x0:.2f},{y0:.2f}), F={F:.2f} → s=F/||v0||={F:.2f}/{mag0:.2f}={s:.2f} → "
-                f"X={x:.2f}, Y={y:.2f}"
+                f"**cart**: basis (x0,y0)=({x0:.2f},{y0:.2f}), F={F:.2f} → s=F/||v0||={F:.2f}/{mag0:.2f}={s:.2f} → X={x:.2f}, Y={y:.2f}"
             )
         else:
             x, y = x0, y0
             explain_rows.append(f"**cart**: direct (X,Y)=({x:.2f},{y:.2f})")
 
-    else:  # angle
-        theta = ent["theta"]
-        cx, sy = math.cos(math.radians(theta)), math.sin(math.radians(theta))
-        x, y = F*cx, F*sy
-        explain_rows.append(
-            f"**angle**: F={F:.2f} N, θ={theta:.2f}° → X=F·cosθ={F:.2f}·cos({theta:.2f}°)={x:.2f}, "
-            f"Y=F·sinθ={F:.2f}·sin({theta:.2f}°)={y:.2f}"
-        )
+    else:
+        theta = float(ent["theta"])
+        ref_axis = ent.get("ref", "X-as")
+        if ref_axis == "X-as":
+            x = F * math.cos(math.radians(theta))
+            y = F * math.sin(math.radians(theta))
+            explain_rows.append(
+                f"**angle-X**: F={F:.2f} N, θ={theta:.2f}° vanaf X → X=F·cosθ={x:.2f}, Y=F·sinθ={y:.2f}"
+            )
+        else:  # Y-as
+            # Hoek gemeten vanaf Y: componenten omgedraaid
+            x = F * math.sin(math.radians(theta))
+            y = F * math.cos(math.radians(theta))
+            explain_rows.append(
+                f"**angle-Y**: F={F:.2f} N, θ={theta:.2f}° vanaf Y → X=F·sinθ={x:.2f}, Y=F·cosθ={y:.2f}"
+            )
 
     if abs(x) + abs(y) > 0:
         vectors.append((x, y, ent["color"]))
@@ -224,17 +239,17 @@ if vectors:
     rows = []
     for i, (x, y, color) in enumerate(vectors, start=1):
         mag = vec_norm2(x, y)
-        ang = angle_deg(x, y)
+        angx = angle_from_x_deg(x, y)
         rows.append({
             "Vector": f"{i}",
             "X": round(x, 2), "Y": round(y, 2),
             "|v| (N)": round(mag, 2),
-            "θ (° vanaf X-as)": None if ang is None else round(ang, 2),
+            "θ (° vanaf X-as)": None if angx is None else round(angx, 2),
             "Kleur": color
         })
 
     Rmag = vec_norm2(Rx, Ry)
-    Rang = angle_deg(Rx, Ry)
+    Rang = angle_from_x_deg(Rx, Ry)
 
     rows.append({
         "Vector": "Resultante",
@@ -252,14 +267,11 @@ if vectors:
         st.markdown(f"- **Vector {i}:** {text}")
 
     st.markdown("**Som van componenten:**")
-    if vectors:
-        st.markdown("Rx = " + " + ".join([f"{x:.2f}" for x, _, _ in vectors]) + f" = {Rx:.2f}")
-        st.markdown("Ry = " + " + ".join([f"{y:.2f}" for _, y, _ in vectors]) + f" = {Ry:.2f}")
+    st.markdown("Rx = " + " + ".join([f"{x:.2f}" for x, _, _ in vectors]) + f" = {Rx:.2f}")
+    st.markdown("Ry = " + " + ".join([f"{y:.2f}" for _, y, _ in vectors]) + f" = {Ry:.2f}")
 
     st.markdown("**Resultante:**")
     st.markdown(f"R = (Rx, Ry) = ({Rx:.2f}, {Ry:.2f}), |R| = √(Rx²+Ry²) = {Rmag:.2f} N.")
     if Rmag > 0:
-        st.markdown("**Richtingshoek van R:**")
-        st.markdown(f"θ = atan2(Ry, Rx) = atan2({Ry:.2f}, {Rx:.2f}) = {Rang:.2f}° (vanaf de X-as).")
-
-st.markdown("---")
+        st.markdown("**Richtingshoek van R (vanaf X-as):**")
+        st.markdown(f"θ = atan2(Ry, Rx) = atan2({Ry:.2f}, {Rx:.2f}) = {Rang:.2f}°.")
