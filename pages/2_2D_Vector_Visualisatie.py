@@ -3,15 +3,8 @@ import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
 
-# Pagina-instellingen: geen sidebar tonen
-st.set_page_config(page_title="🧭 2D Vector Visualisatie", layout="wide", initial_sidebar_state="collapsed")
-HIDE_SIDEBAR_CSS = """
-<style>
-    [data-testid="stSidebar"] {display: none !important;}
-    [data-testid="collapsedControl"] {display: none !important;}
-</style>
-"""
-st.markdown(HIDE_SIDEBAR_CSS, unsafe_allow_html=True)
+# Sidebar zichtbaar houden
+st.set_page_config(page_title="🧭 2D Vector Visualisatie", layout="wide", initial_sidebar_state="expanded")
 
 st.title("🧭 2D Vector Visualisatie")
 
@@ -63,8 +56,8 @@ if "entries2d" not in st.session_state:
     st.session_state.entries2d = [{
         "mode": "cart",      # "cart" of "angle"
         "force": 0.0,        # N
-        "x": 0.0, "y": 0.0,  # alleen voor cart
-        "theta": 0.0,        # graden, alleen voor angle
+        "x": 0.0, "y": 0.0,  # voor cart
+        "theta": 0.0,        # graden, voor angle
         "color": COLOR_PALETTE[0]
     }]
 
@@ -72,7 +65,7 @@ if "color_index_2d" not in st.session_state:
     st.session_state.color_index_2d = 1
 
 # ----------------------------
-# Sidebar (waarden gebruiken, UI verborgen)
+# Sidebar (zichtbaar)
 # ----------------------------
 with st.sidebar:
     st.header("Instellingen")
@@ -82,12 +75,14 @@ with st.sidebar:
     autoscale = st.checkbox("Autoschaal assen", value=True)
     show_resultant = st.checkbox("Toon resultante vector", value=True)
     resultant_color = st.color_picker("Kleur resultante", value="#e41a1c")
+
     if not autoscale:
         st.caption("As-bereiken")
         xmin = st.number_input("Xmin", value=-10.0)
         xmax = st.number_input("Xmax", value=10.0)
         ymin = st.number_input("Ymin", value=-10.0)
         ymax = st.number_input("Ymax", value=10.0)
+
     st.markdown("---")
     if st.button("🗑️ Verwijder alle vectoren"):
         st.session_state.entries2d = [{
@@ -138,8 +133,7 @@ for i, ent in enumerate(st.session_state.entries2d):
         with cols[2]:
             theta = st.number_input(f"θ°{i+1} (vanaf X-as)", value=float(ent["theta"]), key=f"theta2d_{i}")
         with cols[3]:
-            # grijs gemaakte velden tonen we niet; kolom leeg laten
-            st.write("")
+            st.write("")  # leeg om grid te houden
         with cols[4]:
             color = st.color_picker(f"Kleur {i+1}", value=ent.get("color", COLOR_PALETTE[i % len(COLOR_PALETTE)]), key=f"color2d_{i}")
         with cols[5]:
@@ -153,10 +147,10 @@ for i, ent in enumerate(st.session_state.entries2d):
 st.session_state.entries2d = new_entries
 
 # ----------------------------
-# Berekeningen (componenten bepalen per vector)
+# Berekeningen
 # ----------------------------
 vectors = []   # (x,y,color)
-explain_rows = []  # strings voor uitleg per vector
+explain_rows = []
 for ent in st.session_state.entries2d:
     mode = ent["mode"]
     F = ent["force"] or 0.0
@@ -173,9 +167,7 @@ for ent in st.session_state.entries2d:
             )
         else:
             x, y = x0, y0
-            explain_rows.append(
-                f"**cart**: direct (X,Y)=({x:.2f},{y:.2f})"
-            )
+            explain_rows.append(f"**cart**: direct (X,Y)=({x:.2f},{y:.2f})")
 
     else:  # angle
         theta = ent["theta"]
@@ -256,17 +248,14 @@ if vectors:
     st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
     st.markdown("### Uitleg (stap voor stap)")
-    # Per vector: hoe verkregen
     for i, text in enumerate(explain_rows, start=1):
         st.markdown(f"- **Vector {i}:** {text}")
 
-    # Som componenten
     st.markdown("**Som van componenten:**")
     if vectors:
         st.markdown("Rx = " + " + ".join([f"{x:.2f}" for x, _, _ in vectors]) + f" = {Rx:.2f}")
         st.markdown("Ry = " + " + ".join([f"{y:.2f}" for _, y, _ in vectors]) + f" = {Ry:.2f}")
 
-    # Resultante + hoek-afleiding
     st.markdown("**Resultante:**")
     st.markdown(f"R = (Rx, Ry) = ({Rx:.2f}, {Ry:.2f}), |R| = √(Rx²+Ry²) = {Rmag:.2f} N.")
     if Rmag > 0:
