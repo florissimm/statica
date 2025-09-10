@@ -60,12 +60,12 @@ def entry_to_cart(ent, normalize_dircos=True):
     if ent["mode"] == "cart":
         x,y,z = ent["x"], ent["y"], ent["z"]
         mag = vec_norm(x,y,z)
-        if (ent["force"] or 0) > 0 and mag > 1e-12:
+        if (ent.get("force") or 0) > 0 and mag > 1e-12:
             scale = ent["force"] / mag
             return x*scale, y*scale, z*scale
         return x,y,z
     else:
-        mag = ent["force"] or 0.0
+        mag = ent.get("force") or 0.0
         return alpha_beta_gamma_to_cart(mag, ent["alpha"], ent["beta"], ent["gamma"], normalize_if_needed=normalize_dircos)
 
 def pad_range(vals, pr=0.15):
@@ -116,7 +116,9 @@ COLOR_PALETTE = ["#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd",
 if "entries" not in st.session_state:
     st.session_state.entries = [
         {"mode":"cart","force":0.0,"x":0.0,"y":0.0,"z":0.0,
-         "alpha":0.0,"beta":0.0,"gamma":0.0,"color":COLOR_PALETTE[0]},
+         "alpha":0.0,"beta":0.0,"gamma":0.0,"color":COLOR_PALETTE[0],
+         # hybride velden (per vector)
+         "hyb_enable": False, "hyb_beta": 0.0, "hyb_use_z": False, "hyb_z": 0.0, "hyb_xsign": "+"},
     ]
 if "color_index" not in st.session_state:
     st.session_state.color_index = 1
@@ -160,7 +162,8 @@ with st.sidebar:
     st.markdown("---")
     if st.button("🗑️ Verwijder alle vectoren"):
         st.session_state.entries = [{"mode":"cart","force":0.0,"x":0.0,"y":0.0,"z":0.0,
-                                     "alpha":0.0,"beta":0.0,"gamma":0.0,"color":COLOR_PALETTE[0]}]
+                                     "alpha":0.0,"beta":0.0,"gamma":0.0,"color":COLOR_PALETTE[0],
+                                     "hyb_enable": False, "hyb_beta": 0.0, "hyb_use_z": False, "hyb_z": 0.0, "hyb_xsign": "+"}]
         st.session_state.color_index = 1
 
 # ===================================
@@ -175,7 +178,8 @@ if st.button("➕ Voeg rij toe"):
         "force": 0.0,
         "x": 0.0, "y": 0.0, "z": 0.0,
         "alpha": 0.0, "beta": 0.0, "gamma": 0.0,
-        "color": color
+        "color": color,
+        "hyb_enable": False, "hyb_beta": 0.0, "hyb_use_z": False, "hyb_z": 0.0, "hyb_xsign": "+"
     })
     st.session_state.color_index += 1
 
@@ -190,37 +194,76 @@ for i, ent in enumerate(st.session_state.entries):
             key=f"mode_{i}",
         )
     with cols[1]:
-        force = st.number_input(f"Kracht N {i+1}", value=float(ent["force"]), min_value=0.0, key=f"force_{i}")
+        force = st.number_input(f"Kracht N {i+1}", value=float(ent.get("force",0.0)), min_value=0.0, key=f"force_{i}")
+
     if mode == "cart":
         with cols[2]:
-            x = st.number_input(f"X{i+1}", value=float(ent["x"]), key=f"x_{i}")
+            x = st.number_input(f"X{i+1}", value=float(ent.get("x",0.0)), key=f"x_{i}")
         with cols[3]:
-            y = st.number_input(f"Y{i+1}", value=float(ent["y"]), key=f"y_{i}")
+            y = st.number_input(f"Y{i+1}", value=float(ent.get("y",0.0)), key=f"y_{i}")
         with cols[4]:
-            z = st.number_input(f"Z{i+1}", value=float(ent["z"]), key=f"z_{i}")
+            z = st.number_input(f"Z{i+1}", value=float(ent.get("z",0.0)), key=f"z_{i}")
         with cols[5]:
             color = st.color_picker(f"Kleur {i+1}", value=ent.get("color",COLOR_PALETTE[i%len(COLOR_PALETTE)]), key=f"color_{i}")
         with cols[6]:
-            if st.button("🗑️", key=f"del_{i}"):
-                pass
+            delete_clicked = st.button("🗑️", key=f"del_{i}")
+
+        # --- Hybride: β + Y ⇒ α & X (optioneel Z=0 of opgegeven) ---
+        with st.expander(f"Hybride opties (β + Y ⇒ α & X) · Vector {i+1}"):
+            hyb_enable = st.checkbox("Gebruik β° en Y om α en X af te leiden (neem Z=0 tenzij hieronder opgegeven)", value=ent.get("hyb_enable", False), key=f"hyb_enable_{i}")
+            c1, c2, c3, c4 = st.columns([1.1,1.1,1.1,1.1])
+            with c1:
+                hyb_beta = st.number_input(f"β° hyb {i+1}", value=float(ent.get("hyb_beta", 0.0)), key=f"hyb_beta_{i}")
+            with c2:
+                hyb_use_z = st.checkbox("Z opgegeven", value=ent.get("hyb_use_z", False), key=f"hyb_use_z_{i}")
+            with c3:
+                hyb_z = st.number_input(f"Z hyb {i+1}", value=float(ent.get("hyb_z", 0.0)), key=f"hyb_z_{i}")
+            with c4:
+                hyb_xsign = st.selectbox("Teken X", ["+","-"], index=0 if ent.get("hyb_xsign","+")=="+" else 1, key=f"hyb_xsign_{i}")
+
+        # Bereken X (en daarmee α) vanuit β en Y indien geactiveerd
+        if hyb_enable:
+            cb = math.cos(math.radians(hyb_beta))
+            if abs(cb) < 1e-12:
+                st.warning(f"Vector {i+1}: β=90° maakt Y=F·cosβ nul; kan α/X niet afleiden.")
             else:
-                new_entries.append({"mode":"cart","force":force,"x":x,"y":y,"z":z,
-                                    "alpha":0.0,"beta":0.0,"gamma":0.0,"color":color})
+                # Neem F = Y / cosβ (kan negatief zijn als Y en cosβ tegengesteld teken hebben)
+                F_est = y / cb
+                z_eff = hyb_z if hyb_use_z else 0.0
+                rest = F_est*F_est - y*y - z_eff*z_eff
+                if rest < -1e-9:
+                    st.error(f"Vector {i+1}: Combinatie β={hyb_beta:.2f}°, Y={y:.2f}, Z={z_eff:.2f} is onmogelijk (|F|^2 < Y^2+Z^2).")
+                else:
+                    # numerieke ruis klemmen
+                    rest = max(0.0, rest)
+                    x_est = math.sqrt(rest)
+                    if hyb_xsign == "-":
+                        x_est = -x_est
+                    x, z = x_est, (z_eff if hyb_use_z else z)
+
+        if not delete_clicked:
+            new_entries.append({
+                "mode":"cart","force":force,"x":x,"y":y,"z":z,
+                "alpha":0.0,"beta":0.0,"gamma":0.0,"color":color,
+                "hyb_enable": hyb_enable, "hyb_beta": hyb_beta, "hyb_use_z": hyb_use_z, "hyb_z": hyb_z, "hyb_xsign": hyb_xsign
+            })
+
     else:
         with cols[2]:
-            alpha = st.number_input(f"α°{i+1}", value=float(ent["alpha"]), key=f"alpha_{i}")
+            alpha = st.number_input(f"α°{i+1}", value=float(ent.get("alpha",0.0)), key=f"alpha_{i}")
         with cols[3]:
-            beta = st.number_input(f"β°{i+1}", value=float(ent["beta"]), key=f"beta_{i}")
+            beta = st.number_input(f"β°{i+1}", value=float(ent.get("beta",0.0)), key=f"beta_{i}")
         with cols[4]:
-            gamma = st.number_input(f"γ°{i+1}", value=float(ent["gamma"]), key=f"gamma_{i}")
+            gamma = st.number_input(f"γ°{i+1}", value=float(ent.get("gamma",0.0)), key=f"gamma_{i}")
         with cols[5]:
             color = st.color_picker(f"Kleur {i+1}", value=ent.get("color",COLOR_PALETTE[i%len(COLOR_PALETTE)]), key=f"color_{i}")
         with cols[6]:
-            if st.button("🗑️", key=f"del_{i}"):
-                pass
-            else:
-                new_entries.append({"mode":"dir","force":force,"x":0.0,"y":0.0,"z":0.0,
-                                    "alpha":alpha,"beta":beta,"gamma":gamma,"color":color})
+            delete_clicked = st.button("🗑️", key=f"del_{i}")
+        if not delete_clicked:
+            new_entries.append({"mode":"dir","force":force,"x":0.0,"y":0.0,"z":0.0,
+                                "alpha":alpha,"beta":beta,"gamma":gamma,"color":color,
+                                "hyb_enable": ent.get("hyb_enable", False), "hyb_beta": ent.get("hyb_beta",0.0),
+                                "hyb_use_z": ent.get("hyb_use_z", False), "hyb_z": ent.get("hyb_z",0.0), "hyb_xsign": ent.get("hyb_xsign","+")})
 
 st.session_state.entries = new_entries
 
@@ -229,9 +272,9 @@ st.session_state.entries = new_entries
 # ===================================
 def is_blank(ent):
     if ent["mode"] == "cart":
-        return (ent["force"] or 0) <= 0 and vec_norm(ent["x"],ent["y"],ent["z"]) <= 0
+        return (ent.get("force") or 0) <= 0 and vec_norm(ent.get("x",0.0),ent.get("y",0.0),ent.get("z",0.0)) <= 0
     else:
-        return (ent["force"] or 0) <= 0
+        return (ent.get("force") or 0) <= 0
 
 usable_entries = [e for e in st.session_state.entries if not is_blank(e)]
 vectors = [entry_to_cart(ent, normalize_dircos=normalize_dircos) for ent in usable_entries]
@@ -333,21 +376,22 @@ if vectors:
     desc = []
     for i, ent in enumerate([e for e in st.session_state.entries if not is_blank(e)], start=1):
         if ent["mode"] == "dir":
-            F = ent["force"] or 0.0
-            a = ent["alpha"]; b = ent["beta"]; g = ent["gamma"]
+            F = ent.get("force") or 0.0
+            a = ent.get("alpha",0.0); b = ent.get("beta",0.0); g = ent.get("gamma",0.0)
             cx, cy, cz = math.cos(math.radians(a)), math.cos(math.radians(b)), math.cos(math.radians(g))
             X = F * cx; Y = F * cy; Z = F * cz
             desc.append(f"**Vector {i} (dir):** F={F:.2f} N, α={a:.2f}°, β={b:.2f}°, γ={g:.2f}° → X={X:.2f}, Y={Y:.2f}, Z={Z:.2f}")
         else:
-            x0,y0,z0 = ent["x"], ent["y"], ent["z"]
-            F = ent["force"] or 0.0
+            x0,y0,z0 = ent.get("x",0.0), ent.get("y",0.0), ent.get("z",0.0)
+            F = ent.get("force") or 0.0
             base_mag = vec_norm(x0,y0,z0)
             if F > 0 and base_mag > 1e-12:
                 s = F / base_mag
                 X, Y, Z = x0*s, y0*s, z0*s
                 desc.append(f"**Vector {i} (cart):** Basis=({x0:.2f},{y0:.2f},{z0:.2f}), F={F:.2f} N, s={s:.2f} → X={X:.2f}, Y={Y:.2f}, Z={Z:.2f}")
             else:
-                desc.append(f"**Vector {i} (cart):** Direct (X,Y,Z)=({x0:.2f},{y0:.2f},{z0:.2f})")
+                extra = " (hybride toegepast)" if ent.get("hyb_enable", False) else ""
+                desc.append(f"**Vector {i} (cart):** Direct (X,Y,Z)=({x0:.2f},{y0:.2f},{z0:.2f}){extra}")
     desc.append("**Som van componenten:**")
     desc.append("Rx = " + " + ".join([f"{x:.2f}" for x,_,_ in vectors]) + f" = {Rx:.2f}")
     desc.append("Ry = " + " + ".join([f"{y:.2f}" for _,y,_ in vectors]) + f" = {Ry:.2f}")
@@ -356,4 +400,4 @@ if vectors:
     st.markdown("\n\n".join(desc))
 
 st.markdown("---")
-st.caption("Assen door oorsprong, labels, rasterlijnen en zichtbaarheid van Plotly-assen kun je links instellen. Alle resultaten afgerond op 2 decimalen.")
+st.caption("Hybride invoer: vink in cart-modus de expander aan. Vul β° en Y in; optioneel Z. Dan wordt α automatisch bepaald en X berekend (met gekozen teken). Assen door oorsprong, labels, rasterlijnen en zichtbaarheid van Plotly-assen kun je links instellen. Alle resultaten afgerond op 2 decimalen.")
