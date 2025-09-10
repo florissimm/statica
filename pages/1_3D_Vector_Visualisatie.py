@@ -56,18 +56,6 @@ def add_arrow(fig, x, y, z, color, linewidth, markersize, show_points, draw_arro
             name=f"{name} arrow"
         ))
 
-def entry_to_cart(ent, normalize_dircos=True):
-    if ent["mode"] == "cart":
-        x,y,z = ent["x"], ent["y"], ent["z"]
-        mag = vec_norm(x,y,z)
-        if (ent["force"] or 0) > 0 and mag > 1e-12:
-            scale = ent["force"] / mag
-            return x*scale, y*scale, z*scale
-        return x,y,z
-    else:
-        mag = ent["force"] or 0.0
-        return alpha_beta_gamma_to_cart(mag, ent["alpha"], ent["beta"], ent["gamma"], normalize_if_needed=normalize_dircos)
-
 def pad_range(vals, pr=0.15):
     vmin, vmax = min(vals), max(vals)
     if abs(vmax - vmin) < 1e-9:
@@ -76,7 +64,6 @@ def pad_range(vals, pr=0.15):
     return (vmin - pad, vmax + pad)
 
 def add_origin_axes(fig, xr, yr, zr, color="#9e9e9e", width=2, with_labels=False):
-    """Voeg X/Y/Z-assen door (0,0,0) toe en optioneel labels X,Y,Z op de +uiteinden."""
     # X
     fig.add_trace(go.Scatter3d(
         x=[xr[0], xr[1]], y=[0,0], z=[0,0],
@@ -116,7 +103,12 @@ COLOR_PALETTE = ["#1f77b4","#ff7f0e","#2ca02c","#d62728","#9467bd",
 if "entries" not in st.session_state:
     st.session_state.entries = [
         {"mode":"cart","force":0.0,"x":0.0,"y":0.0,"z":0.0,
-         "alpha":0.0,"beta":0.0,"gamma":0.0,"color":COLOR_PALETTE[0]},
+         "alpha":0.0,"beta":0.0,"gamma":0.0,"color":COLOR_PALETTE[0],
+         # labels per vector:
+         "label_on": True,
+         "label_show_name": True,
+         "label_show_angles": True
+        },
     ]
 if "color_index" not in st.session_state:
     st.session_state.color_index = 1
@@ -130,23 +122,32 @@ with st.sidebar:
     show_points = st.checkbox("Eindpunten tonen", value=True)
     linewidth = st.slider("Lijndikte", 1, 12, 6)
     markersize = st.slider("Marker grootte", 1, 12, 5)
+
     autoscale = st.checkbox("Autoschaal assen", value=True)
     normalize_dircos = st.checkbox("Normaliseer αβγ (cos²-som → 1)", value=True)
+
     show_resultant = st.checkbox("Toon resultante vector in 3D", value=True)
     resultant_color = st.color_picker("Kleur resultante", value="#e41a1c")
 
     st.markdown("---")
-    # Nieuw: assen door oorsprong + opties
+    # Oorsprong-assen + opties
     show_origin_axes = st.checkbox("Toon assen door oorsprong (X/Y/Z)", value=True)
     origin_axes_color = st.color_picker("Kleur assen (0,0,0)", value="#9e9e9e")
     origin_axes_width = st.slider("Lijndikte assen (0,0,0)", 1, 8, 2)
     show_origin_axis_labels = st.checkbox("Toon labels bij oorsprong-assen (X/Y/Z)", value=True)
 
     st.markdown("---")
-    # Nieuw: grid/titels/assen
+    # Grid & assen
     show_axis_numbers = st.checkbox("Toon as-getallen (ticks)", value=True)
     show_grid = st.checkbox("Toon rasterlijnen (grid)", value=True)
-    hide_xyz_axes = st.checkbox("Verberg X/Y/Z-assen (alles van Plotly-assen)", value=False)
+    hide_xyz_axes = st.checkbox("Verberg X/Y/Z-assen (Plotly-assen)", value=False)
+
+    st.markdown("---")
+    # Labels in 3D (globale styling)
+    st.subheader("Labels in 3D")
+    enable_labels_globally = st.checkbox("Labels tonen in 3D (globaal)", value=True)
+    label_position = st.slider("Labelpositie langs de vector", 0.4, 0.95, 0.7, step=0.05)
+    label_font_size = st.slider("Label fontgrootte (px)", 8, 24, 13)
 
     st.markdown("---")
     if not autoscale:
@@ -157,10 +158,14 @@ with st.sidebar:
         ymax = st.number_input("Ymax", value=10.0)
         zmin = st.number_input("Zmin", value=-10.0)
         zmax = st.number_input("Zmax", value=10.0)
+
     st.markdown("---")
     if st.button("🗑️ Verwijder alle vectoren"):
-        st.session_state.entries = [{"mode":"cart","force":0.0,"x":0.0,"y":0.0,"z":0.0,
-                                     "alpha":0.0,"beta":0.0,"gamma":0.0,"color":COLOR_PALETTE[0]}]
+        st.session_state.entries = [{
+            "mode":"cart","force":0.0,"x":0.0,"y":0.0,"z":0.0,
+            "alpha":0.0,"beta":0.0,"gamma":0.0,"color":COLOR_PALETTE[0],
+            "label_on": True, "label_show_name": True, "label_show_angles": True
+        }]
         st.session_state.color_index = 1
 
 # ===================================
@@ -175,13 +180,16 @@ if st.button("➕ Voeg rij toe"):
         "force": 0.0,
         "x": 0.0, "y": 0.0, "z": 0.0,
         "alpha": 0.0, "beta": 0.0, "gamma": 0.0,
-        "color": color
+        "color": color,
+        "label_on": True,
+        "label_show_name": True,
+        "label_show_angles": True
     })
     st.session_state.color_index += 1
 
 new_entries = []
 for i, ent in enumerate(st.session_state.entries):
-    cols = st.columns([1.4, 1.8, 1.6, 1.6, 1.6, 1.8, 0.8], gap="small")
+    cols = st.columns([1.2, 1.5, 1.2, 1.2, 1.2, 1.6, 1.6, 0.8], gap="small")
     with cols[0]:
         mode = st.selectbox(
             f"Modus {i+1}",
@@ -191,6 +199,7 @@ for i, ent in enumerate(st.session_state.entries):
         )
     with cols[1]:
         force = st.number_input(f"Kracht N {i+1}", value=float(ent["force"]), min_value=0.0, key=f"force_{i}")
+
     if mode == "cart":
         with cols[2]:
             x = st.number_input(f"X{i+1}", value=float(ent["x"]), key=f"x_{i}")
@@ -198,14 +207,6 @@ for i, ent in enumerate(st.session_state.entries):
             y = st.number_input(f"Y{i+1}", value=float(ent["y"]), key=f"y_{i}")
         with cols[4]:
             z = st.number_input(f"Z{i+1}", value=float(ent["z"]), key=f"z_{i}")
-        with cols[5]:
-            color = st.color_picker(f"Kleur {i+1}", value=ent.get("color",COLOR_PALETTE[i%len(COLOR_PALETTE)]), key=f"color_{i}")
-        with cols[6]:
-            if st.button("🗑️", key=f"del_{i}"):
-                pass
-            else:
-                new_entries.append({"mode":"cart","force":force,"x":x,"y":y,"z":z,
-                                    "alpha":0.0,"beta":0.0,"gamma":0.0,"color":color})
     else:
         with cols[2]:
             alpha = st.number_input(f"α°{i+1}", value=float(ent["alpha"]), key=f"alpha_{i}")
@@ -213,20 +214,53 @@ for i, ent in enumerate(st.session_state.entries):
             beta = st.number_input(f"β°{i+1}", value=float(ent["beta"]), key=f"beta_{i}")
         with cols[4]:
             gamma = st.number_input(f"γ°{i+1}", value=float(ent["gamma"]), key=f"gamma_{i}")
-        with cols[5]:
-            color = st.color_picker(f"Kleur {i+1}", value=ent.get("color",COLOR_PALETTE[i%len(COLOR_PALETTE)]), key=f"color_{i}")
-        with cols[6]:
-            if st.button("🗑️", key=f"del_{i}"):
-                pass
+
+    with cols[5]:
+        color = st.color_picker(f"Kleur {i+1}", value=ent.get("color",COLOR_PALETTE[i%len(COLOR_PALETTE)]), key=f"color_{i}")
+
+    # Per vector: label opties
+    with cols[6]:
+        label_on = st.checkbox("Label aan", value=ent.get("label_on", True), key=f"lbl_on_{i}")
+        label_what = st.multiselect("Toon", ["Naam", "αβγ"], default=[
+            "Naam" if ent.get("label_show_name", True) else None,
+            "αβγ" if ent.get("label_show_angles", True) else None
+        ], key=f"lbl_what_{i}")
+        # schoon default None's:
+        label_what = [x for x in label_what if x is not None]
+
+    with cols[7]:
+        if st.button("🗑️", key=f"del_{i}"):
+            pass
+        else:
+            new_ent = {
+                "mode": mode, "force": force, "color": color,
+                "label_on": label_on,
+                "label_show_name": ("Naam" in label_what),
+                "label_show_angles": ("αβγ" in label_what)
+            }
+            if mode == "cart":
+                new_ent.update({"x":x,"y":y,"z":z,"alpha":0.0,"beta":0.0,"gamma":0.0})
             else:
-                new_entries.append({"mode":"dir","force":force,"x":0.0,"y":0.0,"z":0.0,
-                                    "alpha":alpha,"beta":beta,"gamma":gamma,"color":color})
+                new_ent.update({"x":0.0,"y":0.0,"z":0.0,"alpha":alpha,"beta":beta,"gamma":gamma})
+            new_entries.append(new_ent)
 
 st.session_state.entries = new_entries
 
 # ===================================
-# Plot
+# Bereid data
 # ===================================
+def entry_to_cart(ent, normalize_dircos=True):
+    if ent["mode"] == "cart":
+        x,y,z = ent["x"], ent["y"], ent["z"]
+        mag = vec_norm(x,y,z)
+        if (ent["force"] or 0) > 0 and mag > 1e-12:
+            scale = ent["force"] / mag
+            return x*scale, y*scale, z*scale
+        return x,y,z
+    else:
+        mag = ent["force"] or 0.0
+        return alpha_beta_gamma_to_cart(mag, ent["alpha"], ent["beta"], ent["gamma"], normalize_if_needed=normalize_dircos)
+
 def is_blank(ent):
     if ent["mode"] == "cart":
         return (ent["force"] or 0) <= 0 and vec_norm(ent["x"],ent["y"],ent["z"]) <= 0
@@ -241,13 +275,43 @@ with st.sidebar:
     st.markdown("---")
     st.caption(f"Aantal getekende vectoren: **{len(vectors)}**")
 
+# ===================================
+# Plot
+# ===================================
 fig = go.Figure()
 xs, ys, zs = [], [], []
-for i, ((x, y, z), color) in enumerate(zip(vectors, colors), start=1):
-    add_arrow(fig, x, y, z, color, linewidth, markersize, show_points, draw_arrowheads, f"Vector {i}")
+
+# Vectoren tekenen + labels
+for idx, ((x, y, z), color) in enumerate(zip(vectors, colors), start=1):
+    add_arrow(fig, x, y, z, color, linewidth, markersize, show_points, draw_arrowheads, f"Vector {idx}")
     xs += [0, x]; ys += [0, y]; zs += [0, z]
 
-# Resultante vector optioneel
+    # Label per vector
+    ent = usable_entries[idx-1]
+    if enable_labels_globally and ent.get("label_on", True):
+        # bereken hoeken
+        a,b,g,mag = cart_to_alpha_beta_gamma(x,y,z)
+        parts = []
+        if ent.get("label_show_name", True):
+            parts.append(f"Vector {idx}")
+        if ent.get("label_show_angles", True) and a is not None:
+            parts.append(f"α={a:.2f}°  β={b:.2f}°  γ={g:.2f}°")
+        if parts:
+            t = "<br>".join(parts)
+            # positie op de vector
+            fx = label_position * x
+            fy = label_position * y
+            fz = label_position * z
+            fig.add_trace(go.Scatter3d(
+                x=[fx], y=[fy], z=[fz],
+                mode="text",
+                text=[t],
+                textfont=dict(size=label_font_size, color=color),
+                showlegend=False,
+                name=f"label_{idx}"
+            ))
+
+# Resultante
 Rx = Ry = Rz = 0.0
 if vectors and show_resultant:
     Rx = sum(x for x,y,z in vectors)
@@ -255,18 +319,34 @@ if vectors and show_resultant:
     Rz = sum(z for x,y,z in vectors)
     add_arrow(fig, Rx, Ry, Rz, resultant_color, linewidth+2, markersize+2, show_points, draw_arrowheads, "Resultante")
 
+    # Label voor resultante – eigen toggles (reuse globale + aparte subsectie?)
+    # Hier gebruiken we dezelfde globale toggles; apart per R kun je snel toevoegen als je het wilt.
+    if enable_labels_globally:
+        Ra, Rb, Rg, Rmag = cart_to_alpha_beta_gamma(Rx, Ry, Rz)
+        parts_R = ["Resultante"]
+        if Ra is not None:
+            parts_R.append(f"α={Ra:.2f}°  β={Rb:.2f}°  γ={Rg:.2f}°")
+        tR = "<br>".join(parts_R)
+        fig.add_trace(go.Scatter3d(
+            x=[label_position*Rx], y=[label_position*Ry], z=[label_position*Rz],
+            mode="text",
+            text=[tR],
+            textfont=dict(size=label_font_size, color=resultant_color),
+            showlegend=False,
+            name="label_R"
+        ))
+
 # Asbereiken
 if xs and ys and zs:
     if show_resultant and (Rx or Ry or Rz):
         xs += [0, Rx]; ys += [0, Ry]; zs += [0, Rz]
-    if autoscale:
-        xr = pad_range(xs); yr = pad_range(ys); zr = pad_range(zs)
-    else:
-        xr, yr, zr = (xmin, xmax), (ymin, ymax), (zmin, zmax)
+    xr = pad_range(xs) if autoscale else (xmin, xmax)
+    yr = pad_range(ys) if autoscale else (ymin, ymax)
+    zr = pad_range(zs) if autoscale else (zmin, zmax)
 else:
     xr, yr, zr = (-1, 1), (-1, 1), (-1, 1)
 
-# Oorsprong-assen (optioneel met labels)
+# Oorsprong-assen
 if show_origin_axes:
     add_origin_axes(fig, xr, yr, zr, color=origin_axes_color, width=origin_axes_width, with_labels=show_origin_axis_labels)
 
@@ -274,12 +354,8 @@ if show_origin_axes:
 def axis_cfg(title):
     if hide_xyz_axes:
         return dict(visible=False)
-    return dict(
-        title=title,
-        range=[xr[0], xr[1]] if title=="X" else ([yr[0], yr[1]] if title=="Y" else [zr[0], zr[1]]),
-        showticklabels=show_axis_numbers,
-        showgrid=show_grid
-    )
+    rng = [xr[0], xr[1]] if title=="X" else ([yr[0], yr[1]] if title=="Y" else [zr[0], zr[1]])
+    return dict(title=title, range=rng, showticklabels=show_axis_numbers, showgrid=show_grid)
 
 fig.update_layout(
     scene=dict(
@@ -296,7 +372,7 @@ st.markdown("## Interactieve 3D Vectoren")
 st.plotly_chart(fig, use_container_width=True)
 
 # ===================================
-# Resultaten onder de plot
+# Resultaten + Uitleg
 # ===================================
 if vectors:
     rows = []
@@ -328,32 +404,3 @@ if vectors:
 
     st.markdown("### Resultaten")
     st.dataframe(pd.DataFrame(rows), use_container_width=True)
-
-    st.markdown("### Uitleg (stap voor stap)")
-    desc = []
-    for i, ent in enumerate([e for e in st.session_state.entries if not is_blank(e)], start=1):
-        if ent["mode"] == "dir":
-            F = ent["force"] or 0.0
-            a = ent["alpha"]; b = ent["beta"]; g = ent["gamma"]
-            cx, cy, cz = math.cos(math.radians(a)), math.cos(math.radians(b)), math.cos(math.radians(g))
-            X = F * cx; Y = F * cy; Z = F * cz
-            desc.append(f"**Vector {i} (dir):** F={F:.2f} N, α={a:.2f}°, β={b:.2f}°, γ={g:.2f}° → X={X:.2f}, Y={Y:.2f}, Z={Z:.2f}")
-        else:
-            x0,y0,z0 = ent["x"], ent["y"], ent["z"]
-            F = ent["force"] or 0.0
-            base_mag = vec_norm(x0,y0,z0)
-            if F > 0 and base_mag > 1e-12:
-                s = F / base_mag
-                X, Y, Z = x0*s, y0*s, z0*s
-                desc.append(f"**Vector {i} (cart):** Basis=({x0:.2f},{y0:.2f},{z0:.2f}), F={F:.2f} N, s={s:.2f} → X={X:.2f}, Y={Y:.2f}, Z={Z:.2f}")
-            else:
-                desc.append(f"**Vector {i} (cart):** Direct (X,Y,Z)=({x0:.2f},{y0:.2f},{z0:.2f})")
-    desc.append("**Som van componenten:**")
-    desc.append("Rx = " + " + ".join([f"{x:.2f}" for x,_,_ in vectors]) + f" = {Rx:.2f}")
-    desc.append("Ry = " + " + ".join([f"{y:.2f}" for _,y,_ in vectors]) + f" = {Ry:.2f}")
-    desc.append("Rz = " + " + ".join([f"{z:.2f}" for _,_,z in vectors]) + f" = {Rz:.2f}")
-    desc.append(f"**Resultante:** R=({Rx:.2f},{Ry:.2f},{Rz:.2f}), |R|={Rmag:.2f} N, hoeken: α={Ra:.2f}°, β={Rb:.2f}°, γ={Rg:.2f}°")
-    st.markdown("\n\n".join(desc))
-
-st.markdown("---")
-st.caption("Assen door oorsprong, labels, rasterlijnen en zichtbaarheid van Plotly-assen kun je links instellen. Alle resultaten afgerond op 2 decimalen.")
